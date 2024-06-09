@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, EmailStr
 from datetime import date
 from typing import Optional
 from .models.models import User
@@ -24,6 +24,8 @@ class Contact(ContactBase):
 
 class UserBase(BaseModel):
     username: str
+    email: EmailStr
+
 
 
 class UserCreate(UserBase):
@@ -32,6 +34,22 @@ class UserCreate(UserBase):
     
 class User(UserBase):
     id: int
+    contacts: list[Contact] = []
+    avatar: str
     
     class Config:
         from_attributes = True
+
+
+class RequestEmail(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordConfirm(BaseModel):
+    token: str
+    new_password: str
+
