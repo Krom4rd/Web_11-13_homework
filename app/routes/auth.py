@@ -1,7 +1,18 @@
 from typing import Annotated
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, status, Security, BackgroundTasks, Request
-from fastapi.security import OAuth2PasswordRequestForm, HTTPAuthorizationCredentials, HTTPBearer
+from fastapi import (APIRouter,
+                    Depends,
+                    HTTPException,
+                    status,
+                    Security,
+                    BackgroundTasks,
+                    Request,
+                    Form)
+from fastapi.security import (OAuth2PasswordRequestForm,
+                              HTTPAuthorizationCredentials,
+                              HTTPBearer)
+from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from ..models import models
@@ -17,6 +28,7 @@ security = HTTPBearer()
 
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+templates = Jinja2Templates(directory=Path("app/services") / "templates")
 
 
 @router.post("/signup", status_code=status.HTTP_201_CREATED)
@@ -83,8 +95,10 @@ async def confirmed_email(token: str, db: Session = Depends(get_db)):
     await auth_repo.confirmed_email(email, db)
     return {"message": "Email confirmed"}
 
-@router.post('/request_email')
-async def request_email(body: schemas.RequestEmail, background_tasks: BackgroundTasks, request: Request,
+@router.post("/request_email")
+async def request_email(body: schemas.RequestEmail,
+                        background_tasks: BackgroundTasks,
+                        request: Request,
                         db: Session = Depends(get_db)):
     user = await auth_repo.get_user_by_email(body.email, db)
 
@@ -93,3 +107,45 @@ async def request_email(body: schemas.RequestEmail, background_tasks: Background
     if user:
         background_tasks.add_task(email_service.send_email, user.email, user.username, request.base_url)
     return {"message": "Check your email for confirmation."}
+
+@router.post("/password_recovery_message")
+async def password_recovery_message(body: schemas.RequestEmail,
+                            background_tasks: BackgroundTasks,
+                            request: Request,
+                            db: Session = Depends(get_db)):
+    user = await auth_repo.get_user_by_email(body.email, db)
+    if user and user.confirmed:
+        metod = "recovery"
+        background_tasks.add_task(email_service.send_email, user.email, user.username, request.base_url, metod)
+        return {"message": "Check your email for recovery password."}
+    elif user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Email not confirmed")
+    else:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invalid email")
+
+@router.get("/password_recovery/{token}")
+async def password_reset_form(request: Request, token: str):
+    return templates.TemplateResponse(
+        "password_rocovery_form.html", {"request": request, "token": token}
+        )
+
+@router.post("/password_recovery/{token}")
+async def recovery_password_confirm(
+    token: str, new_password: str = Form(...), db: Session = Depends(get_db)
+):
+    email = auth_service.verify_password_recovery_token(token)
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired token",
+        )
+    user = await auth_repo.get_user_by_email(email, db)
+    if user:
+        await auth_repo.update_password(user,
+                                        auth_service.get_password_hash(new_password),
+                                        db)
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+        )
+    return {"message": "Password changed successfully"}

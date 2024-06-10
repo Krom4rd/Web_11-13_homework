@@ -105,3 +105,9 @@ async def confirmed_email(email: str, db: Session = Depends(get_db)) -> None:
     user = await get_user_by_email(email, db)
     user.confirmed = True
     db.commit()
+
+async def update_password(user: models.User, password: str, db: Session = Depends(get_db)) -> None:
+    user.password = password
+    db.commit()
+    db.refresh(user)
+    

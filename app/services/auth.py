@@ -101,6 +101,21 @@ class Auth:
         to_encode.update({"iat": datetime.utcnow(), "exp": expire})
         token = jwt.encode(to_encode, self.SECRET_KEY, algorithm=self.ALGORITHM)
         return token
+    
+    def create_password_recovery_token(self, email: str):
+        expire = datetime.utcnow() + timedelta(minutes=15)
+        payload = {"exp": expire, "email": email}
+        return jwt.encode(payload, self.SECRET_KEY, algorithm=self.ALGORITHM)
+
+    def verify_password_recovery_token(self, token: str):
+        try:
+            payload = jwt.decode(token, self.SECRET_KEY, algorithms=[self.ALGORITHM])
+            return payload["email"]
+        except JWTError:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Could not validate credentials",
+            )
         
 
 

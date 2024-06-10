@@ -8,7 +8,7 @@ from ..services.auth import auth_service
 
 conf = ConnectionConfig(
     MAIL_USERNAME="education.test.python@gmail.com",
-    MAIL_PASSWORD="",
+    MAIL_PASSWORD="vwef ykkg htdc dqvp",
     MAIL_FROM="education.test.python@gmail.com",
     MAIL_PORT=465,
     MAIL_SERVER="smtp.gmail.com",
@@ -21,18 +21,26 @@ conf = ConnectionConfig(
 )
 
 
-async def send_email(email: EmailStr, username: str, host: str):
+async def send_email(email: EmailStr, username: str, host: str, metod: str = "varification"):
     try:
-        token_verification = auth_service.create_email_token({"sub": email})
+        if metod == "varification":
+            subject = "Confirm your email "
+            template_name = "email_template.html"
+            token = auth_service.create_email_token({"sub": email})
+        elif metod == "recovery":
+            subject = "Password recovery"
+            template_name = "password_recovery.html"
+            token = auth_service.create_password_recovery_token(email)
+        
         message = MessageSchema(
-            subject="Confirm your email ",
+            subject= subject,
             recipients=[email],
-            template_body={"host": host, "username": username, "token": token_verification},
+            template_body={"host": host, "username": username, "token": token},
             subtype=MessageType.html
         )
 
         fm = FastMail(conf)
-        await fm.send_message(message, template_name="email_template.html")
+        await fm.send_message(message, template_name=template_name)
     except ConnectionErrors as err:
         print(err)
 
