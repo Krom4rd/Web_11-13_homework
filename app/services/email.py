@@ -5,14 +5,15 @@ from fastapi_mail.errors import ConnectionErrors
 from pydantic import EmailStr
 
 from ..services.auth import auth_service
+from ..config.config import settings
 
 conf = ConnectionConfig(
-    MAIL_USERNAME="education.test.python@gmail.com",
-    MAIL_PASSWORD="vwef ykkg htdc dqvp",
-    MAIL_FROM="education.test.python@gmail.com",
-    MAIL_PORT=465,
-    MAIL_SERVER="smtp.gmail.com",
-    MAIL_FROM_NAME="Oleh Novosad",
+    MAIL_USERNAME=str(settings.mail_username),
+    MAIL_PASSWORD=str(settings.mail_password),
+    MAIL_FROM=str(settings.mail_from),
+    MAIL_PORT=int(settings.mail_port),
+    MAIL_SERVER=str(settings.mail_server),
+    MAIL_FROM_NAME=str(settings.mail_from_name),
     MAIL_STARTTLS=False,
     MAIL_SSL_TLS=True,
     USE_CREDENTIALS=True,

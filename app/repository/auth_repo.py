@@ -10,6 +10,7 @@ from jose import JWTError, jwt
 from ..database.database import get_db
 from ..models import models
 from ..schemas import UserCreate
+from ..config.config import settings
 
 
 class Hash:
@@ -22,8 +23,8 @@ class Hash:
         return self.pwd_context.hash(password)
 
 
-SECRET_KEY = "secret_key"
-ALGORITHM = "HS256"
+SECRET_KEY = str(settings.secret_key)
+ALGORITHM = str(settings.algorithm)
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
@@ -110,4 +111,3 @@ async def update_password(user: models.User, password: str, db: Session = Depend
     user.password = password
     db.commit()
     db.refresh(user)
-    
