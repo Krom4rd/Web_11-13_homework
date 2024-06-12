@@ -2,6 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, status, Depends, Query, Path
 from sqlalchemy.orm import Session 
+from fastapi_limiter.depends import RateLimiter
 
 from ..database.database import get_db
 from ..models.models import Contact, User
@@ -13,11 +14,13 @@ from .. import schemas
 
 router = APIRouter(prefix="/contact", tags=["contacts"])
 
-@router.get("/{contact_id}", response_model=schemas.Contact)
+@router.get("/{contact_id}",
+            response_model=schemas.Contact,
+            dependencies=[Depends(RateLimiter(times=2, seconds=5))])
 async def get_contact_by_id(
     contact_id: Annotated[int, Path(title="The id of contact to get")],
     db: Session = Depends(get_db),
-    user = Depends(auth_repo.get_current_user)
+    user = Depends(auth_service.get_current_user)
     ):
     result = await contacts_repo.get_contact_with_id(contact_id=contact_id,
                                                      db=db,
@@ -26,14 +29,18 @@ async def get_contact_by_id(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="contact not found")
     return result
 
-@router.get("/", response_model=list[schemas.Contact])
+@router.get("/",
+            response_model=list[schemas.Contact],
+            dependencies=[Depends(RateLimiter(times=2, seconds=5))])
 async def all_contacts(db: Session = Depends(get_db),
-                       user = Depends(auth_repo.get_current_user))-> list[schemas.Contact]:
+                       user = Depends(auth_service.get_current_user))-> list[schemas.Contact]:
     result = await contacts_repo.get_all_contact(db, user)
     return result
 
 
-@router.post("/", response_model=schemas.Contact)
+@router.post("/",
+             response_model=schemas.Contact,
+             dependencies=[Depends(RateLimiter(times=2, seconds=5))])
 async def add_new_contact(
     contact: schemas.ContactCreate,
     db: Session = Depends(get_db),
@@ -42,10 +49,11 @@ async def add_new_contact(
     contact = await contacts_repo.create_contact(db, contact, user)
     return contact
 
-@router.delete("/{contact_id}")
+@router.delete("/{contact_id}",
+               dependencies=[Depends(RateLimiter(times=2, seconds=5))])
 async def delete_contact(
     contact_id: Annotated[int, Path(title="The id of contact to get")],
-    user = Depends(auth_repo.get_current_user),
+    user = Depends(auth_service.get_current_user),
     db: Session = Depends(get_db)
     ):
     result =  await contacts_repo.delete_contact(contact_id=contact_id,
@@ -57,9 +65,11 @@ async def delete_contact(
         )
     return result
 
-@router.get("/search_by/", response_model=list[schemas.Contact])
+@router.get("/search_by/",
+            response_model=list[schemas.Contact],
+            dependencies=[Depends(RateLimiter(times=2, seconds=5))])
 async def search_by_filter(
-        user: User = Depends(auth_repo.get_current_user),
+        user: User = Depends(auth_service.get_current_user),
         first_name: Annotated[str | None, Query(alias="first name", example="string")] = None,
         last_name: Annotated[str | None, Query(alias="last name", example="string")] = None,
         email: Annotated[str | None, Query(alias="email", example="test@test.test")] = None,
@@ -74,19 +84,23 @@ async def search_by_filter(
     return result
 
 
-@router.get("/birthdays/", response_model=list[schemas.Contact])
+@router.get("/birthdays/",
+            response_model=list[schemas.Contact],
+            dependencies=[Depends(RateLimiter(times=2, seconds=5))])
 async def get_upcoming_birthdays(db: Session = Depends(get_db),
-                                 user = Depends(auth_repo.get_current_user)):                               
+                                 user = Depends(auth_service.get_current_user)):                               
     result = await contacts_repo.get_upcoming_birthdays(user=user,
                                                          db=db)
     return result
 
 
-@router.patch("/{contact_id}", response_model=ContactBase)
+@router.patch("/{contact_id}",
+              response_model=ContactBase,
+              dependencies=[Depends(RateLimiter(times=2, seconds=5))])
 async def update_contact(contact_id: int,
                          update_body: ContactBase,
                          db: Session = Depends(get_db),
-                         user = Depends(auth_repo.get_current_user)):
+                         user = Depends(auth_service.get_current_user)):
     result = await contacts_repo.update_contact(contact_id=contact_id,
                                                 update_body=update_body,
                                                 db=db,

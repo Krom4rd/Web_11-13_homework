@@ -4,7 +4,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from ..database.database import Base
 
 default_avatar_url = (
-    "https://res.cloudinary.com/restapp/image/upload/v1717342921/restapp/default.png"
+    "https://res.cloudinary.com/dyn9mlthg/image/upload/v1718192432/default.png"
 )
 
 class User(Base):

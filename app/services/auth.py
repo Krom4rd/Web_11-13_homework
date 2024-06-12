@@ -9,13 +9,13 @@ from sqlalchemy.orm import Session
 
 from ..database.database import get_db
 from ..repository import auth_repo as repository_users
-from ..config.config import settings
+from ..conf.config import settings_
 
 
 class Auth:
     pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-    SECRET_KEY = str(settings.secret_key)
-    ALGORITHM = str(settings.algorithm)
+    SECRET_KEY = str(settings_.secret_key)
+    ALGORITHM = str(settings_.algorithm)
     oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
     def verify_password(self, plain_password, hashed_password):

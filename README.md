@@ -1,4 +1,6 @@
-# Homework 11 FastAPI
+# Homework 13 FastAPI. 
+# Email varification, Recovery password, Cloud service, Limiter,
+# Docker compose, Securyty
 
 **Installation and launch**
 
@@ -12,9 +14,13 @@
  
     pip install -r requirements.txt
 
-- [ ] **_Create and run Docker postgresql container_**
+- [ ] **_Create .env file and fill it_**
 
-    docker run --name homework_11 -p 5432:5432 -e POSTGRES_PASSWORD=password -d postgres
+    example in env_example
+
+- [ ] **_Create and run Docker postgresql containers_**
+
+    docker-compose up
 
 - [ ] **_Perform migrations for postgresql_**
 
@@ -27,4 +33,12 @@
 - [ ] **_To receive documentation, open:_**
 
     http://127.0.0.1:8000/docs
+
+- [ ] **_Stop server_**
+
+    press ctrl+c
+
+- [ ] **_Stop and remove Docker containers_**
+
+    docker-compose down
 

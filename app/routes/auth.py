@@ -8,12 +8,17 @@ from fastapi import (APIRouter,
                     Security,
                     BackgroundTasks,
                     Request,
-                    Form)
+                    Form,
+                    UploadFile,
+                    File,
+                    Query)
 from fastapi.security import (OAuth2PasswordRequestForm,
                               HTTPAuthorizationCredentials,
                               HTTPBearer)
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
+import cloudinary
+import cloudinary.uploader
 
 from ..models import models
 from ..database.database import get_db
@@ -21,6 +26,7 @@ from ..repository import auth_repo
 from .. import schemas
 from ..services import email as email_service
 from ..services.auth import auth_service
+from app.conf.config import settings_
 
 
 hash_handler = auth_repo.Hash()
@@ -52,8 +58,8 @@ async def login(body: OAuth2PasswordRequestForm = Depends(), db: Session = Depen
     if not hash_handler.verify_password(body.password, user.password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid password")
     # Generate JWT
-    access_token = await auth_repo.create_access_token(data={"sub": user.username})
-    refresh_token = await auth_repo.create_refresh_token(data={"sub": user.username})
+    access_token = await auth_repo.create_access_token(data={"sub": user.email})
+    refresh_token = await auth_repo.create_refresh_token(data={"sub": user.email})
     user.refresh_token = refresh_token
     db.commit()
     return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
@@ -81,7 +87,7 @@ async def root(current_user: Annotated[schemas.UserCreate, Depends(auth_repo.get
 
 
 @router.get("/secret")
-async def read_item(current_user: models.User = Depends(auth_repo.get_current_user)):
+async def read_item(current_user: models.User = Depends(auth_service.get_current_user)):
     return {"message": 'secret router', "owner": current_user.email}
 
 @router.get('/confirmed_email/{token}')
@@ -109,11 +115,11 @@ async def request_email(body: schemas.RequestEmail,
     return {"message": "Check your email for confirmation."}
 
 @router.post("/password_recovery_message")
-async def password_recovery_message(body: schemas.RequestEmail,
+async def password_recovery_message(email: Annotated[str | None, Query(alias="email", example="test@test.test")],
                             background_tasks: BackgroundTasks,
                             request: Request,
                             db: Session = Depends(get_db)):
-    user = await auth_repo.get_user_by_email(body.email, db)
+    user = await auth_repo.get_user_by_email(email, db)
     if user and user.confirmed:
         metod = "recovery"
         background_tasks.add_task(email_service.send_email, user.email, user.username, request.base_url, metod)
@@ -149,3 +155,22 @@ async def recovery_password_confirm(
             status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
         )
     return {"message": "Password changed successfully"}
+
+
+@router.patch('/avatar', 
+              response_model=schemas.User)
+async def update_avatar_user(file: UploadFile = File(), current_user: models.User = Depends(auth_service.get_current_user),
+                             db: Session = Depends(get_db)):
+    
+    # Configuration       
+    cloudinary.config( 
+    cloud_name = settings_.cloud_name, 
+    api_key = settings_.api_key, 
+    api_secret = settings_.api_secret,
+    secure=True
+)
+    r = cloudinary.uploader.upload(file.file, public_id=f'api/{current_user.username}', overwrite=True)
+    src_url = cloudinary.CloudinaryImage(f'api/{current_user.username}')\
+                        .build_url(width=250, height=250, crop='fill', version=r.get('version'))
+    user = await auth_repo.update_avatar(current_user, src_url, db)
+    return user
