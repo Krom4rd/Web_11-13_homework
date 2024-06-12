@@ -9,6 +9,8 @@ from jose import JWTError, jwt
 
 from ..database.database import get_db
 from ..models import models
+from ..schemas import UserCreate
+from ..conf.config import settings_
 
 
 class Hash:
@@ -21,8 +23,8 @@ class Hash:
         return self.pwd_context.hash(password)
 
 
-SECRET_KEY = "secret_key"
-ALGORITHM = "HS256"
+SECRET_KEY = str(settings_.secret_key)
+ALGORITHM = str(settings_.algorithm)
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
@@ -88,4 +90,29 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
     return user
 
 async def get_user_by_email(email: str, db: Session) -> models.User:
-    return db.query(models.User).filter(models.User.username == email).first()
+    return db.query(models.User).filter(models.User.email == email).first()
+
+async def create_user(body: UserCreate, db: Session):
+    exist_user = db.query(models.User).filter_by(username=body.username).first()
+    if exist_user:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Account already exists")
+    new_user = models.User(username=body.username, email=body.email, password=body.password)
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    return new_user
+
+async def confirmed_email(email: str, db: Session = Depends(get_db)) -> None:
+    user = await get_user_by_email(email, db)
+    user.confirmed = True
+    db.commit()
+
+async def update_password(user: models.User, password: str, db: Session = Depends(get_db)) -> None:
+    user.password = password
+    db.commit()
+    db.refresh(user)
+
+async def update_avatar(user: models.User, url: str, db: Session = Depends(get_db)) -> models.User:
+    user.avatar = url
+    db.commit()
+    return user

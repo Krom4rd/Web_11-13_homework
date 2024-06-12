@@ -9,12 +9,13 @@ from sqlalchemy.orm import Session
 
 from ..database.database import get_db
 from ..repository import auth_repo as repository_users
+from ..conf.config import settings_
 
 
 class Auth:
     pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-    SECRET_KEY = "secret_key"
-    ALGORITHM = "HS256"
+    SECRET_KEY = str(settings_.secret_key)
+    ALGORITHM = str(settings_.algorithm)
     oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
     def verify_password(self, plain_password, hashed_password):
@@ -78,6 +79,45 @@ class Auth:
         if user is None:
             raise credentials_exception
         return user
+
+    async def confirmed_email(email: str, db: Session) -> None:
+        user = await repository_users.get_user_by_email(email, db)
+        user.confirmed = True
+        db.commit()
+
+    async def get_email_from_token(self, token: str):
+        try:
+            payload = jwt.decode(token, self.SECRET_KEY, algorithms=[self.ALGORITHM])
+            email = payload["sub"]
+            return email
+        except JWTError as e:
+            print(e)
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                                detail="Invalid token for email verification")
+
+
+    def create_email_token(self, data: dict):
+        to_encode = data.copy()
+        expire = datetime.utcnow() + timedelta(days=7)
+        to_encode.update({"iat": datetime.utcnow(), "exp": expire})
+        token = jwt.encode(to_encode, self.SECRET_KEY, algorithm=self.ALGORITHM)
+        return token
+    
+    def create_password_recovery_token(self, email: str):
+        expire = datetime.utcnow() + timedelta(minutes=15)
+        payload = {"exp": expire, "email": email}
+        return jwt.encode(payload, self.SECRET_KEY, algorithm=self.ALGORITHM)
+
+    def verify_password_recovery_token(self, token: str):
+        try:
+            payload = jwt.decode(token, self.SECRET_KEY, algorithms=[self.ALGORITHM])
+            return payload["email"]
+        except JWTError:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Could not validate credentials",
+            )
+        
 
 
 auth_service = Auth()

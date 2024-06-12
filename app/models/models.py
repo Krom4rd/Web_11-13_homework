@@ -1,22 +1,22 @@
-from sqlalchemy import Integer, String, Date, ForeignKey, Column
+from sqlalchemy import Integer, String, Date, ForeignKey, Column, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..database.database import Base
 
+default_avatar_url = (
+    "https://res.cloudinary.com/dyn9mlthg/image/upload/v1718192432/default.png"
+)
 
 class User(Base):
     __tablename__ = "users"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     username: Mapped[str] = mapped_column(String(150), nullable=False, unique=True)
+    email: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
     password: Mapped[str] = mapped_column(String(255), nullable=False)
     refresh_token: Mapped[str] = mapped_column(String(255), nullable=True)
-
-    # def __repr__(self):
-    #     print(self.username, type(self.username))
-    #     return f"{self.username}"
-    
-    # contact_id= Column("contact_id", ForeignKey('contacts.id', ondelete='CASCADE'), default=None)
-    # contacts = relationship("Contact", backref="users")
+    confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
+    avatar: Mapped[str] = mapped_column(
+        String(255), nullable=True, default=default_avatar_url)
 
 
 class Contact(Base):
