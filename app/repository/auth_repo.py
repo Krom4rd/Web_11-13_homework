@@ -12,107 +12,82 @@ from ..models import models
 from ..schemas import UserCreate
 from ..conf.config import settings_
 
-
-class Hash:
-    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-    
-    def verify_password(self, plain_password, hashed_password):
-        return self.pwd_context.verify(plain_password, hashed_password)
-
-    def get_password_hash(self, password: str):
-        return self.pwd_context.hash(password)
-
-
-SECRET_KEY = str(settings_.secret_key)
-ALGORITHM = str(settings_.algorithm)
-
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 
-# define a function to generate a new access token
-async def create_access_token(data: dict, expires_delta: Optional[float] = None):
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.now(tz=timezone.utc) + timedelta(seconds=expires_delta)
-    else:
-        expire = datetime.now(timezone.utc) + timedelta(minutes=15)
-    to_encode.update({"iat": datetime.now(timezone.utc), "exp": expire, "scope": "access_token"})
-    encoded_access_token = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_access_token
+async def get_user_by_email(email: str, db: Session = Depends(get_db)) -> models.User | None:
+    """
+    Function for searching a user in the database by email.
 
-
-# define a function to generate a new refresh token
-async def create_refresh_token(data: dict, expires_delta: Optional[float] = None):
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + timedelta(seconds=expires_delta)
-    else:
-        expire = datetime.utcnow() + timedelta(days=7)
-    to_encode.update({"iat": datetime.utcnow(), "exp": expire, "scope": "refresh_token"})
-    encoded_refresh_token = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_refresh_token
-
-
-async def get_email_form_refresh_token(refresh_token: str):
-    try:
-        print(refresh_token)
-        payload = jwt.decode(refresh_token, SECRET_KEY, algorithms=[ALGORITHM])
-        if payload['scope'] == 'refresh_token':
-            email = payload['sub']
-            return email
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Invalid scope for token')
-    except JWTError as err:
-        print(err)
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Could not validate credentials')
-
-
-async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-
-    try:
-        # Decode JWT
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        if payload['scope'] == 'access_token':
-            username = payload["sub"]
-            if username is None:
-                raise credentials_exception
-        else:
-            raise credentials_exception
-    except JWTError:
-        raise credentials_exception
-    user: models.User | None = db.query(models.User).filter(models.User.username == username).first()
-    if user is None:
-        raise credentials_exception
-    return user
-
-async def get_user_by_email(email: str, db: Session) -> models.User:
+    :param email: The user's email address needs to be found.
+    :type email: str
+    :param db: Generated database connection object, defaults to Depends(get_db).
+    :type db: Session, optional
+    :return: Database object
+    :rtype: models.User | None
+    """    
     return db.query(models.User).filter(models.User.email == email).first()
 
-async def create_user(body: UserCreate, db: Session):
+async def create_user(body: UserCreate, db: Session= Depends(get_db)) -> models.User | None:
+    """
+    Function for writing to the user database.
+
+    May cause an error if the new user's data matches an existing user: HTTP_409_CONFLICT.
+    Email and username must be unique.
+    
+    :param body: model UserCreate(username: str, email: EmailStr, password: str).
+    :type body: UserCreate
+    :param db:  Generated database connection object
+    :type db: Session
+    :raises HTTPException: Account already exists error.
+    :return: Add user to database and return models.User
+    :rtype: models.User | None
+    """    
     exist_user = db.query(models.User).filter_by(username=body.username).first()
     if exist_user:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Account already exists")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Account with this username already exists")
+    else:
+        exist_user = db.query(models.User).filter_by(email=body.email).first()
+        if exist_user:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Account with this email already exists")
     new_user = models.User(username=body.username, email=body.email, password=body.password)
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
     return new_user
 
-async def confirmed_email(email: str, db: Session = Depends(get_db)) -> None:
-    user = await get_user_by_email(email, db)
-    user.confirmed = True
-    db.commit()
-
 async def update_password(user: models.User, password: str, db: Session = Depends(get_db)) -> None:
+    """
+    Update_password the function of writing a new password for the user in database.
+
+    WARNING! Password must be hashed.
+
+    :param user: Object from the user database.
+    :type user: models.User
+    :param password: Hashed password.
+    :type password: str
+    :param db: Generated database connection object, defaults to Depends(get_db).
+    :type db: Session, optional
+    """    
     user.password = password
     db.commit()
     db.refresh(user)
 
 async def update_avatar(user: models.User, url: str, db: Session = Depends(get_db)) -> models.User:
+    """
+    Function to store the path url to the new user avatar in the database.
+    
+    The path to the avatar must exist and be accessible.
+
+    :param user: Object from the user database.
+    :type user: models.User
+    :param url: The path to the user's new avatar.
+    :type url: str
+    :param db: Generated database connection object, defaults to Depends(get_db).
+    :type db: Session, optional
+    :return: Updated user model from database.
+    :rtype: models.User
+    """    
     user.avatar = url
     db.commit()
     return user

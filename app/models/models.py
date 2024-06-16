@@ -20,6 +20,7 @@ class User(Base):
 
 
 class Contact(Base):
+    
     __tablename__ = "contacts"
     
     id: Mapped[int] = mapped_column(Integer, primary_key=True)

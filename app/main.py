@@ -25,6 +25,12 @@ app.include_router(auth.router, prefix="/api")
 
 @app.get("/")
 async def root():
+    """
+    Returns the root of the FastAPI.
+
+    :return: A dictionary with the root
+    :rtype: json dict
+    """    
     return {
         "massege":"Hello fastAPI",
         "status": "OK",
@@ -33,6 +39,10 @@ async def root():
 
 @app.on_event("startup")
 async def startup():
+    """
+     Initialize fastapi. This is called when we have a connection
+    """
+    
     r = await redis.Redis(host=settings_.redis_host,
                           port=settings_.redis_port,
                           db=0, encoding="utf-8",

@@ -25,31 +25,55 @@ from ..database.database import get_db
 from ..repository import auth_repo
 from .. import schemas
 from ..services import email as email_service
-from ..services.auth import auth_service
+from ..services.auth import auth_service, Hash
 from app.conf.config import settings_
 
 
-hash_handler = auth_repo.Hash()
+hash_handler = Hash()
 security = HTTPBearer()
 
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 templates = Jinja2Templates(directory=Path("app/services") / "templates")
 
-
 @router.post("/signup", status_code=status.HTTP_201_CREATED)
 async def signup(body: schemas.UserCreate, background_tasks: BackgroundTasks, request: Request, db: Session = Depends(get_db)):
-    exist_user = await auth_repo.get_user_by_email(body.email, db)
-    if exist_user:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Account already exists")
-    body.password = hash_handler.get_password_hash(body.password)
+    """
+    Register a new user in database and send an email verification link.
+
+    :param body: model UserCreate(username: str, email: EmailStr, password: str).
+    :type body: schemas.UserCreate
+    :param background_tasks: Background tasks for email sending.
+    :type background_tasks: BackgroundTasks
+    :param request: Request object to access headers and other details.
+    :type request: Request
+    :param db: Generated database connection object, defaults to Depends(get_db)
+    :type db: Session, optional
+    :return: {"user": new user model, "detail": ...}
+    :rtype: json dict
+    """    
     new_user = await auth_repo.create_user(body, db)
-    background_tasks.add_task(email_service.send_email, new_user.email, new_user.username, request.base_url)
+    if new_user:
+        body.password = hash_handler.get_password_hash(body.password)
+        background_tasks.add_task(email_service.send_email, new_user.email, new_user.username, request.base_url)
     return {"user": new_user, "detail": "User successfully created. Check your email for confirmation."}
 
 
 @router.post("/login")
 async def login(body: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    """
+    Authenticate a user using email and password, returning JWT access and refresh tokens.
+
+    :param body: The form data containing the email and password.
+    :type body: OAuth2PasswordRequestForm, optional
+    :param db: Generated database connection object, defaults to Depends(get_db)
+    :type db: Session, optional
+    :raises HTTPException: Invalid email
+    :raises HTTPException: Email not confirmed
+    :raises HTTPException: Invalid password
+    :return: {"access_token": str, "refresh_token": str, "token_type": "bearer"}
+    :rtype: json dict
+    """    
     user = await auth_repo.get_user_by_email(body.username, db)
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email")
@@ -58,47 +82,88 @@ async def login(body: OAuth2PasswordRequestForm = Depends(), db: Session = Depen
     if not hash_handler.verify_password(body.password, user.password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid password")
     # Generate JWT
-    access_token = await auth_repo.create_access_token(data={"sub": user.email})
-    refresh_token = await auth_repo.create_refresh_token(data={"sub": user.email})
+    access_token = await auth_service.create_access_token(data={"sub": user.email})
+    refresh_token = await auth_service.create_refresh_token(data={"sub": user.email})
     user.refresh_token = refresh_token
     db.commit()
     return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
 
 @router.get('/refresh_token')
 async def refresh_token(credentials: HTTPAuthorizationCredentials = Security(security), db: Session = Depends(get_db)):
+    """
+    Refreshes authentication by validating an existing refresh token and
+    issuing new tokens.
+
+    :param credentials: Credentials containing the refresh token.
+    :type credentials: HTTPAuthorizationCredentials, optional
+    :param db: Generated database connection object, defaults to Depends(get_db).
+    :type db: Session, optional
+    :raises HTTPException: Invalid refresh token
+    :return: {"access_token": str, "refresh_token": str, "token_type": "bearer"}
+    :rtype: json dict
+    """    
     token = credentials.credentials
-    email = await auth_repo.get_email_form_refresh_token(token)
+    email = await auth_service.decode_refresh_token(token)
     user = db.query(models.User).filter(models.User.username == email).first()
     if user.refresh_token != token:
         user.refresh_token = None
         db.commit()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
 
-    access_token = await auth_repo.create_access_token(data={"sub": email})
-    refresh_token = await auth_repo.create_refresh_token(data={"sub": email})
+    access_token = await auth_service.create_access_token(data={"sub": email})
+    refresh_token = await auth_service.create_refresh_token(data={"sub": email})
     user.refresh_token = refresh_token
     db.commit()
     return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
 
 
 @router.get("/me", response_model=schemas.User)
-async def root(current_user: Annotated[schemas.UserCreate, Depends(auth_repo.get_current_user)]):
+async def root(current_user: Annotated[schemas.UserCreate, Depends(auth_service.get_current_user)]):
+    """
+    Retrieves the current user's profile information
+
+    :param current_user: model UserCreate(username: str, email: EmailStr, password: str)
+    :type current_user: Annotated[schemas.UserCreate, Depends
+    :return: Database object.
+    :rtype: models.User
+    """    
     return current_user
 
 
 @router.get("/secret")
 async def read_item(current_user: models.User = Depends(auth_service.get_current_user)):
+    """
+    read_item _summary_
+
+    _extended_summary_
+
+    :param current_user: _description_, defaults to Depends(auth_service.get_current_user)
+    :type current_user: models.User, optional
+    :return: _description_
+    :rtype: _type_
+    """    
     return {"message": 'secret router', "owner": current_user.email}
 
 @router.get('/confirmed_email/{token}')
 async def confirmed_email(token: str, db: Session = Depends(get_db)):
+    """
+    Confirms a user's email address using a token sent during registration.
+
+    :param token: Token from email.
+    :type token: str
+    :param db: Generated database connection object, defaults to Depends(get_db).
+    :type db: Session, optional
+    :raises HTTPException: Verification error
+    :return: {"massage": ...}
+    :rtype: json dict
+    """    
     email = await auth_service.get_email_from_token(token)
     user = await auth_repo.get_user_by_email(email, db)
     if user is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Verification error")
     if user.confirmed:
         return {"message": "Your email is already confirmed"}
-    await auth_repo.confirmed_email(email, db)
+    await auth_service.confirmed_email(email, db)
     return {"message": "Email confirmed"}
 
 @router.post("/request_email")
@@ -106,6 +171,21 @@ async def request_email(body: schemas.RequestEmail,
                         background_tasks: BackgroundTasks,
                         request: Request,
                         db: Session = Depends(get_db)):
+    """
+    Sends a new email verification token if the initial token is lost
+    or expired
+
+    :param body: Email of the user requesting a new token.
+    :type body: schemas.RequestEmail
+    :param background_tasks: Background tasks for sending email.
+    :type background_tasks: BackgroundTasks
+    :param request: Request object to access host details for link generation.
+    :type request: Request
+    :param db: Generated database connection object, defaults to Depends(get_db)
+    :type db: Session, optional
+    :return: {"massage": ...}
+    :rtype: json dict
+    """    
     user = await auth_repo.get_user_by_email(body.email, db)
 
     if user.confirmed:
@@ -119,6 +199,22 @@ async def password_recovery_message(email: Annotated[str | None, Query(alias="em
                             background_tasks: BackgroundTasks,
                             request: Request,
                             db: Session = Depends(get_db)):
+    """
+    Sends a password reset link to the user's email if registeredin database.
+
+    :param background_tasks: Background tasks for sending email.
+    :type background_tasks: BackgroundTasks
+    :param request: Request object to access host details for link generation.
+    :type request: Request
+    :param email: Contains the email address for sending the reset link.
+    :type email: EmailStr
+    :param db: Generated database connection object, defaults to Depends(get_db)
+    :type db: Session, optional
+    :raises HTTPException: Email not confirmed
+    :raises HTTPException: Invalid email
+    :return: {"message": ...}
+    :rtype: json dict
+    """    
     user = await auth_repo.get_user_by_email(email, db)
     if user and user.confirmed:
         metod = "recovery"
@@ -131,6 +227,16 @@ async def password_recovery_message(email: Annotated[str | None, Query(alias="em
 
 @router.get("/password_recovery/{token}")
 async def password_reset_form(request: Request, token: str):
+    """
+    Rejects the password recovery form.
+
+    :param request: Request object to access host details for link generation.
+    :type request: Request
+    :param token: Password recovery token.
+    :type token: str
+    :return: Password recovery form.
+    :rtype: html form
+    """    
     return templates.TemplateResponse(
         "password_rocovery_form.html", {"request": request, "token": token}
         )
@@ -138,8 +244,23 @@ async def password_reset_form(request: Request, token: str):
 @router.post("/password_recovery/{token}")
 async def recovery_password_confirm(
     token: str, new_password: str = Form(...), db: Session = Depends(get_db)
-):
-    email = auth_service.verify_password_recovery_token(token)
+    ):
+    """
+    Dependency validation function to set a new password
+    for a user and save the new password to the database
+
+    :param token: Password recovery token.
+    :type token: str
+    :param new_password: New password in a format familiar to the user.
+    :type new_password: str, optional
+    :param db: Generated database connection object, defaults to Depends(get_db).
+    :type db: Session, optional
+    :raises HTTPException: Invalid or expired token
+    :raises HTTPException: User not found
+    :return: {"message": ...}
+    :rtype: json dict
+    """    
+    email = auth_service.get_email_from_recovery_token(token)
     if not email:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -148,7 +269,7 @@ async def recovery_password_confirm(
     user = await auth_repo.get_user_by_email(email, db)
     if user:
         await auth_repo.update_password(user,
-                                        auth_service.get_password_hash(new_password),
+                                        hash_handler.get_password_hash(new_password),
                                         db)
     else:
         raise HTTPException(
@@ -160,8 +281,19 @@ async def recovery_password_confirm(
 @router.patch('/avatar', 
               response_model=schemas.User)
 async def update_avatar_user(file: UploadFile = File(), current_user: models.User = Depends(auth_service.get_current_user),
-                             db: Session = Depends(get_db)):
-    
+                             db: Session = Depends(get_db)) -> models.User:
+    """
+    Update user avatar
+
+    :param file: Image file.
+    :type file: UploadFile, optional
+    :param current_user: The user instance obtained after successful authentication.
+    :type current_user: models.User, optional
+    :param db: Generated database connection object, defaults to Depends(get_db)
+    :type db: Session, optional
+    :return: Database object.
+    :rtype: models.User
+    """    
     # Configuration       
     cloudinary.config( 
     cloud_name = settings_.cloud_name, 
