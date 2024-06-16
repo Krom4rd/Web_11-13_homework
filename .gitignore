@@ -2,3 +2,5 @@ venv/
 *__
 .env
 postgres-data
+test.py
+docs/build/
