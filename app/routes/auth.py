@@ -52,9 +52,9 @@ async def signup(body: schemas.UserCreate, background_tasks: BackgroundTasks, re
     :return: {"user": new user model, "detail": ...}
     :rtype: json dict
     """    
+    body.password = hash_handler.get_password_hash(body.password)
     new_user = await auth_repo.create_user(body, db)
     if new_user:
-        body.password = hash_handler.get_password_hash(body.password)
         background_tasks.add_task(email_service.send_email, new_user.email, new_user.username, request.base_url)
     return {"user": new_user, "detail": "User successfully created. Check your email for confirmation."}
 

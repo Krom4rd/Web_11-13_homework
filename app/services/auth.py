@@ -6,6 +6,7 @@ from fastapi.security import OAuth2PasswordBearer
 from passlib.context import CryptContext
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
+import redis 
 
 from ..database.database import get_db
 from ..models import models
@@ -48,6 +49,8 @@ class Auth:
     SECRET_KEY = str(settings_.secret_key)
     ALGORITHM = str(settings_.algorithm)
     oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+
+    r = redis.Redis(host=settings_.redis_host, port=settings_.redis_port, db=0)
 
     # define a function to generate a new access token
     async def create_access_token(self, data: dict, expires_delta: Optional[float] = None) -> str:

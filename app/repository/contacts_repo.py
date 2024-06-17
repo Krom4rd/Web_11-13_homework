@@ -25,7 +25,7 @@ async def get_all_contact(db: Session, user: models.User) -> list[models.Contact
     return contacts
 
 
-async def create_contact(db: Session, contact: schemas.Contact, user: schemas.User) -> models.Contact:
+async def create_contact(db: Session, contact: schemas.Contact, user: models.User) -> models.Contact:
     """
     Function to create a new contact for the user.
 

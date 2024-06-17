@@ -1,11 +1,6 @@
-from datetime import datetime, timedelta, timezone
-from typing import Optional
-
 from fastapi import Depends, HTTPException, status
-from passlib.context import CryptContext
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
-from jose import JWTError, jwt
 
 from ..database.database import get_db
 from ..models import models

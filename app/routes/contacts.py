@@ -57,6 +57,7 @@ async def all_contacts(db: Session = Depends(get_db),
     :return: All user contacts
     :rtype: list[models.Contact]
     """    
+    
     result = await contacts_repo.get_all_contact(db, user)
     return result
 
