@@ -7,6 +7,7 @@ from pydantic import EmailStr
 from ..services.auth import auth_service
 from ..conf.config import settings_
 
+# Email configuration using settings from the application configuration
 conf = ConnectionConfig(
     MAIL_USERNAME=str(settings_.mail_username),
     MAIL_PASSWORD=str(settings_.mail_password),
@@ -22,7 +23,21 @@ conf = ConnectionConfig(
 )
 
 
-async def send_email(email: EmailStr, username: str, host: str, metod: str = "varification"):
+async def send_email(email: EmailStr, username: str, host: str, metod: str = "varification") -> None:
+    """
+    Function for sending emails.
+
+    There are 2 variants of varification and recovery.
+
+    :param email: Email as a string.
+    :type email: EmailStr
+    :param username: The username of the recipient, used for personalising the email.
+    :type username: str
+    :param host: The base URL of the host, used to create the link for email verification or recovery passsword.
+    :type host: str
+    :param metod: "varification" or "recovery", defaults to "varification".
+    :type metod: str, optional
+    """    
     try:
         if metod == "varification":
             subject = "Confirm your email "

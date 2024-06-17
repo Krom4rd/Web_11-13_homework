@@ -4,6 +4,24 @@ from typing import Optional
 from .models.models import User
 
 class ContactBase(BaseModel):
+    """
+    Represents a contact entry in the database,
+    storing personal and contact information.
+
+    :param first_name: The contact's first name, a required field.
+    :type first_name: String
+    :param last_name: The contact's last name, a required field.
+    :type last_name: String
+    :param birthday: The contact's date of birth, an optional field.
+    :type birthday: Date
+    :param email: The contact's email address, must be unique.
+    :type email: String
+    :param phone_number: The contact's phone number, an optional field.
+    :type phone_number: String
+    :param other_information: Other information or notes about the contact,\
+                            stored as text and is optional.
+    :type other_information: String
+    """
     first_name: str = Field(max_length=32)
     last_name: str = Field(max_length=32)
     birthday: date

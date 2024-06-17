@@ -1,6 +1,5 @@
-# Homework 13 FastAPI. 
-# Email varification, Recovery password, Cloud service, Limiter,
-# Docker compose, Securyty
+# Homework 14 FastAPI. 
+# Tests, Dokumentation
 
 
 **Installation and launch**
